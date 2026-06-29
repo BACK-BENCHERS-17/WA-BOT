@@ -9,6 +9,11 @@ export interface HealthStatus {
   status: string;
 }
 
+export interface ConnectInput {
+  /** Phone number with country code, no spaces or dashes e.g. 919876543210 */
+  phoneNumber: string;
+}
+
 export type SessionStatusStatus = typeof SessionStatusStatus[keyof typeof SessionStatusStatus];
 
 

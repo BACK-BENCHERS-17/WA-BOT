@@ -1,21 +1,9 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { sessionsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
-import { logger } from "../lib/logger";
-import { randomUUID } from "crypto";
+import { connectWhatsApp, disconnectWhatsApp, waEvents } from "../lib/whatsapp-service";
 
 const router = Router();
-
-function generatePairingCode(): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  let code = "";
-  for (let i = 0; i < 8; i++) {
-    if (i === 4) code += "-";
-    code += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return code;
-}
 
 async function getOrCreateSession() {
   const existing = await db.select().from(sessionsTable).limit(1);
@@ -42,53 +30,60 @@ router.get("/session/status", async (req, res) => {
 
 router.post("/session/connect", async (req, res) => {
   try {
-    const session = await getOrCreateSession();
-    const code = generatePairingCode();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    const { phoneNumber } = req.body as { phoneNumber: string };
+    if (!phoneNumber || typeof phoneNumber !== "string") {
+      return res.status(400).json({ error: "phoneNumber is required" });
+    }
 
-    await db
-      .update(sessionsTable)
-      .set({
-        status: "connecting",
-        pairingCode: code,
-        pairingCodeExpiresAt: expiresAt,
-        updatedAt: new Date(),
-      })
-      .where(eq(sessionsTable.id, session.id));
-
-    res.json({
-      code,
-      expiresAt: expiresAt.toISOString(),
-      instructions:
-        "Open WhatsApp on your phone, go to Settings > Linked Devices > Link a Device, then enter this code.",
-    });
-  } catch (err) {
-    req.log.error({ err }, "Failed to generate pairing code");
-    res.status(500).json({ error: "Internal server error" });
+    const result = await connectWhatsApp(phoneNumber);
+    res.json(result);
+  } catch (err: any) {
+    req.log.error({ err }, "Failed to connect WhatsApp");
+    res.status(500).json({ error: err?.message ?? "Failed to start session" });
   }
 });
 
 router.post("/session/disconnect", async (req, res) => {
   try {
-    const session = await getOrCreateSession();
-    await db
-      .update(sessionsTable)
-      .set({
-        connected: false,
-        status: "disconnected",
-        phoneNumber: null,
-        name: null,
-        pairingCode: null,
-        pairingCodeExpiresAt: null,
-        updatedAt: new Date(),
-      })
-      .where(eq(sessionsTable.id, session.id));
-
+    await disconnectWhatsApp();
     res.json({ success: true, message: "Session disconnected successfully." });
   } catch (err) {
     req.log.error({ err }, "Failed to disconnect session");
     res.status(500).json({ error: "Internal server error" });
   }
+});
+
+// SSE endpoint for real-time updates
+router.get("/events", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.flushHeaders();
+
+  const send = (event: string, data: unknown) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  const onSession = (data: unknown) => send("session_update", data);
+  const onMessage = (data: unknown) => send("new_message", data);
+  const onActivity = (data: unknown) => send("activity", data);
+
+  waEvents.on("session_update", onSession);
+  waEvents.on("new_message", onMessage);
+  waEvents.on("activity", onActivity);
+
+  // heartbeat every 20s
+  const heartbeat = setInterval(() => {
+    res.write(": ping\n\n");
+  }, 20000);
+
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    waEvents.off("session_update", onSession);
+    waEvents.off("new_message", onMessage);
+    waEvents.off("activity", onActivity);
+  });
 });
 
 export default router;

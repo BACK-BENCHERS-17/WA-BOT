@@ -25,7 +25,6 @@ paths:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -51,7 +50,13 @@ paths:
     post:
       operationId: connectSession
       tags: [session]
-      summary: Start a new WhatsApp session and get pairing code
+      summary: Start a new WhatsApp session with phone number pairing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectInput"
       responses:
         "200":
           description: Pairing code generated
@@ -279,6 +284,15 @@ components:
           type: string
       required:
         - status
+
+    ConnectInput:
+      type: object
+      properties:
+        phoneNumber:
+          type: string
+          description: "Phone number with country code, no spaces or dashes e.g. 919876543210"
+      required:
+        - phoneNumber
 
     SessionStatus:
       type: object

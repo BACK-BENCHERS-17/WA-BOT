@@ -9,7 +9,6 @@ import * as zod from 'zod';
 
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
@@ -30,8 +29,12 @@ export const GetSessionStatusResponse = zod.object({
 
 
 /**
- * @summary Start a new WhatsApp session and get pairing code
+ * @summary Start a new WhatsApp session with phone number pairing
  */
+export const ConnectSessionBody = zod.object({
+  "phoneNumber": zod.string().describe('Phone number with country code, no spaces or dashes e.g. 919876543210')
+})
+
 export const ConnectSessionResponse = zod.object({
   "code": zod.string(),
   "expiresAt": zod.string(),

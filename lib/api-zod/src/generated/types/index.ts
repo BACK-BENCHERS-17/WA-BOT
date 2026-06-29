@@ -14,6 +14,7 @@ export * from './botRule';
 export * from './botRuleInput';
 export * from './botRuleInputMatchType';
 export * from './botRuleMatchType';
+export * from './connectInput';
 export * from './contact';
 export * from './getMessagesParams';
 export * from './healthStatus';

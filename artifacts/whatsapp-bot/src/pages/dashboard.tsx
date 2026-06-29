@@ -1,4 +1,6 @@
-import { useGetStatsSummary, useGetActivityFeed, useGetSessionStatus } from "@workspace/api-client-react";
+import { useEffect } from "react";
+import { useGetStatsSummary, useGetActivityFeed, useGetSessionStatus, getGetStatsSummaryQueryKey, getGetActivityFeedQueryKey, getGetSessionStatusQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -6,9 +8,23 @@ import { MessageSquare, Zap, Users, CheckCircle, Activity, Smartphone, PowerOff,
 import { format } from "date-fns";
 
 export default function Dashboard() {
-  const { data: stats, isLoading: statsLoading } = useGetStatsSummary();
-  const { data: activity, isLoading: activityLoading } = useGetActivityFeed();
-  const { data: session, isLoading: sessionLoading } = useGetSessionStatus();
+  const queryClient = useQueryClient();
+  const { data: stats, isLoading: statsLoading } = useGetStatsSummary({ query: { refetchInterval: 15000 } });
+  const { data: activity, isLoading: activityLoading } = useGetActivityFeed({ query: { refetchInterval: 15000 } });
+  const { data: session, isLoading: sessionLoading } = useGetSessionStatus({ query: { refetchInterval: 10000 } });
+
+  useEffect(() => {
+    const es = new EventSource("/api/events");
+    const refresh = () => {
+      queryClient.invalidateQueries({ queryKey: getGetStatsSummaryQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetActivityFeedQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetSessionStatusQueryKey() });
+    };
+    es.addEventListener("new_message", refresh);
+    es.addEventListener("activity", refresh);
+    es.addEventListener("session_update", refresh);
+    return () => es.close();
+  }, [queryClient]);
 
   return (
     <div className="flex-1 overflow-auto bg-gray-50/50 p-8">

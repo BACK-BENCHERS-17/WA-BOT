@@ -25,6 +25,7 @@ import type {
   BotConfigInput,
   BotRule,
   BotRuleInput,
+  ConnectInput,
   Contact,
   GetMessagesParams,
   HealthStatus,
@@ -72,7 +73,6 @@ export const getHealthCheckUrl = () => {
 }
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const healthCheck = async ( options?: RequestInit): Promise<HealthStatus> => {
@@ -227,16 +227,16 @@ export const getConnectSessionUrl = () => {
 }
 
 /**
- * @summary Start a new WhatsApp session and get pairing code
+ * @summary Start a new WhatsApp session with phone number pairing
  */
-export const connectSession = async ( options?: RequestInit): Promise<PairingCode> => {
+export const connectSession = async (connectInput: ConnectInput, options?: RequestInit): Promise<PairingCode> => {
 
   return customFetch<PairingCode>(getConnectSessionUrl(),
   {
     ...options,
-    method: 'POST'
-
-
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(connectInput)
   }
 );}
 
@@ -244,8 +244,8 @@ export const connectSession = async ( options?: RequestInit): Promise<PairingCod
 
 
 export const getConnectSessionMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof connectSession>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof connectSession>>, TError,void, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof connectSession>>, TError,{data: BodyType<ConnectInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof connectSession>>, TError,{data: BodyType<ConnectInput>}, TContext> => {
 
 const mutationKey = ['connectSession'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -257,10 +257,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof connectSession>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof connectSession>>, {data: BodyType<ConnectInput>}> = (props) => {
+          const {data} = props ?? {};
 
-
-          return  connectSession(requestOptions)
+          return  connectSession(data,requestOptions)
         }
 
 
@@ -271,18 +271,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type ConnectSessionMutationResult = NonNullable<Awaited<ReturnType<typeof connectSession>>>
-
+    export type ConnectSessionMutationBody = BodyType<ConnectInput>
     export type ConnectSessionMutationError = ErrorType<unknown>
 
     /**
- * @summary Start a new WhatsApp session and get pairing code
+ * @summary Start a new WhatsApp session with phone number pairing
  */
 export const useConnectSession = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof connectSession>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof connectSession>>, TError,{data: BodyType<ConnectInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof connectSession>>,
         TError,
-        void,
+        {data: BodyType<ConnectInput>},
         TContext
       > => {
       return useMutation(getConnectSessionMutationOptions(options));

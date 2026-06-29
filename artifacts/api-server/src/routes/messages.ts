@@ -7,6 +7,7 @@ import {
 } from "@workspace/db";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { sendMessageToContact } from "../lib/whatsapp-service";
 
 const router = Router();
 
@@ -14,12 +15,6 @@ router.get("/messages", async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 50, 200);
     const contactId = req.query.contactId as string | undefined;
-
-    const query = db
-      .select()
-      .from(messagesTable)
-      .orderBy(desc(messagesTable.timestamp))
-      .limit(limit);
 
     let messages;
     if (contactId) {
@@ -30,7 +25,11 @@ router.get("/messages", async (req, res) => {
         .orderBy(desc(messagesTable.timestamp))
         .limit(limit);
     } else {
-      messages = await query;
+      messages = await db
+        .select()
+        .from(messagesTable)
+        .orderBy(desc(messagesTable.timestamp))
+        .limit(limit);
     }
 
     res.json(
@@ -65,6 +64,13 @@ router.post("/messages/:id/reply", async (req, res) => {
     }
 
     const msg = original[0];
+
+    try {
+      await sendMessageToContact(msg.contactId, text.trim());
+    } catch (sendErr: any) {
+      req.log.warn({ sendErr }, "WhatsApp not connected, storing reply only");
+    }
+
     const replyId = randomUUID();
     await db.insert(messagesTable).values({
       id: replyId,

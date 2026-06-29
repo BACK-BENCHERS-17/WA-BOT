@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useGetContacts, useGetMessages, useSendReply, getGetMessagesQueryKey } from "@workspace/api-client-react";
+import { useState, useEffect } from "react";
+import { useGetContacts, useGetMessages, useSendReply, getGetMessagesQueryKey, getGetContactsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { MessageSquare, Search, Send, User } from "lucide-react";
@@ -15,11 +15,23 @@ export default function Messages() {
   const [replyText, setReplyText] = useState("");
   const queryClient = useQueryClient();
 
-  const { data: contacts, isLoading: contactsLoading } = useGetContacts();
+  const { data: contacts, isLoading: contactsLoading } = useGetContacts({ query: { refetchInterval: 10000 } });
   const { data: messages, isLoading: messagesLoading } = useGetMessages(
     { contactId: selectedContactId },
-    { query: { enabled: !!selectedContactId } }
+    { query: { enabled: !!selectedContactId, refetchInterval: 5000 } }
   );
+
+  // SSE real-time updates
+  useEffect(() => {
+    const es = new EventSource("/api/events");
+    es.addEventListener("new_message", () => {
+      queryClient.invalidateQueries({ queryKey: getGetContactsQueryKey() });
+      if (selectedContactId) {
+        queryClient.invalidateQueries({ queryKey: getGetMessagesQueryKey({ contactId: selectedContactId }) });
+      }
+    });
+    return () => es.close();
+  }, [queryClient, selectedContactId]);
 
   const sendReplyMutation = useSendReply({
     mutation: {

@@ -1,69 +1,121 @@
 import { useState, useEffect } from "react";
-import { useGetSessionStatus, useConnectSession, useDisconnectSession, getGetSessionStatusQueryKey } from "@workspace/api-client-react";
+import {
+  useGetSessionStatus,
+  useConnectSession,
+  useDisconnectSession,
+  getGetSessionStatusQueryKey,
+} from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Smartphone, QrCode, PowerOff, AlertCircle, Copy, Check, RefreshCw } from "lucide-react";
+import { Smartphone, PowerOff, AlertCircle, Copy, Check, RefreshCw, Phone } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Session() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [copied, setCopied] = useState(false);
-  
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [pairingCode, setPairingCode] = useState<string | null>(null);
+
   const { data: session, isLoading } = useGetSessionStatus({
     query: {
-      refetchInterval: (data) => (data?.status === 'connecting' ? 3000 : false),
-    }
+      refetchInterval: (data) =>
+        data?.status === "connecting" ? 2000 : 5000,
+    },
   });
 
   const connectMutation = useConnectSession();
   const disconnectMutation = useDisconnectSession();
 
-  const handleConnect = () => {
-    connectMutation.mutate(undefined, {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetSessionStatusQueryKey() });
-        toast({ title: "Connecting...", description: "Requesting pairing code." });
-      },
-      onError: (err) => {
-        toast({ title: "Connection failed", description: err.message || "Unknown error", variant: "destructive" });
-      }
+  // SSE for real-time session updates
+  useEffect(() => {
+    const es = new EventSource("/api/events");
+    es.addEventListener("session_update", () => {
+      queryClient.invalidateQueries({ queryKey: getGetSessionStatusQueryKey() });
     });
+    return () => es.close();
+  }, [queryClient]);
+
+  const handleConnect = () => {
+    const cleaned = phoneNumber.replace(/\D/g, "");
+    if (!cleaned || cleaned.length < 10) {
+      toast({
+        title: "Phone number required",
+        description: "Enter your number with country code, e.g. 919876543210",
+        variant: "destructive",
+      });
+      return;
+    }
+    connectMutation.mutate(
+      { data: { phoneNumber: cleaned } },
+      {
+        onSuccess: (data) => {
+          setPairingCode(data.code);
+          queryClient.invalidateQueries({ queryKey: getGetSessionStatusQueryKey() });
+          toast({ title: "Pairing code ready", description: "Enter this code in WhatsApp on your phone." });
+        },
+        onError: (err: any) => {
+          toast({
+            title: "Connection failed",
+            description: err?.message ?? "Unknown error",
+            variant: "destructive",
+          });
+        },
+      }
+    );
   };
 
   const handleDisconnect = () => {
     disconnectMutation.mutate(undefined, {
       onSuccess: () => {
+        setPairingCode(null);
+        setPhoneNumber("");
         queryClient.invalidateQueries({ queryKey: getGetSessionStatusQueryKey() });
-        toast({ title: "Disconnected", description: "WhatsApp session has been terminated." });
+        toast({ title: "Disconnected", description: "WhatsApp session terminated." });
       },
-      onError: (err) => {
-        toast({ title: "Disconnect failed", description: err.message || "Unknown error", variant: "destructive" });
-      }
+      onError: (err: any) => {
+        toast({ title: "Disconnect failed", description: err?.message ?? "Unknown error", variant: "destructive" });
+      },
     });
   };
 
   const copyCode = (code: string) => {
     navigator.clipboard.writeText(code);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setTimeout(() => setCopied(false), 2500);
     toast({ title: "Copied", description: "Pairing code copied to clipboard." });
   };
 
   return (
     <div className="flex-1 overflow-auto bg-gray-50/50 p-8 flex items-center justify-center">
-      <div className="w-full max-w-lg">
+      <div className="w-full max-w-lg space-y-4">
+
+        {/* How to link guide */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800 space-y-1">
+          <p className="font-semibold flex items-center gap-2">
+            <AlertCircle className="h-4 w-4" /> How pairing works
+          </p>
+          <ol className="list-decimal list-inside ml-1 space-y-0.5">
+            <li>Enter your WhatsApp number with country code (no spaces)</li>
+            <li>Click <strong>Generate Pairing Code</strong></li>
+            <li>Open WhatsApp &rarr; Settings &rarr; Linked Devices &rarr; Link a Device</li>
+            <li>Tap <strong>Link with phone number instead</strong> and enter the code</li>
+          </ol>
+        </div>
+
         <Card className="border-border/50 shadow-sm">
           <CardHeader className="text-center pb-2">
-            <div className="mx-auto bg-primary/10 p-3 rounded-full w-fit mb-4">
+            <div className="mx-auto bg-primary/10 p-3 rounded-full w-fit mb-3">
               <Smartphone className="h-8 w-8 text-primary" />
             </div>
             <CardTitle className="text-2xl">WhatsApp Device Link</CardTitle>
             <CardDescription>
-              Connect your WhatsApp Business account to enable auto-replies and message management.
+              Connect your WhatsApp account to enable the auto-reply bot.
             </CardDescription>
           </CardHeader>
 
@@ -73,26 +125,27 @@ export default function Session() {
                 <Skeleton className="h-12 w-[250px]" />
                 <Skeleton className="h-4 w-[200px]" />
               </div>
-            ) : session?.status === 'connected' ? (
-              <div className="flex flex-col items-center space-y-6">
+            ) : session?.status === "connected" ? (
+              <div className="flex flex-col items-center space-y-5">
                 <div className="bg-green-50 text-green-700 p-4 rounded-lg flex items-center gap-3 w-full border border-green-200">
                   <div className="bg-green-100 p-2 rounded-full">
                     <Check className="h-5 w-5" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-green-900">Successfully Connected</h3>
-                    <p className="text-sm">Ready to handle messages.</p>
+                    <h3 className="font-semibold text-green-900">Connected — Bot is live</h3>
+                    <p className="text-sm">Incoming messages will be auto-replied based on your rules.</p>
                   </div>
                 </div>
-
-                <div className="w-full space-y-4 bg-muted/30 p-4 rounded-lg border">
+                <div className="w-full space-y-3 bg-muted/30 p-4 rounded-lg border">
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-muted-foreground">Status</span>
-                    <Badge variant="outline" className="bg-green-100 text-green-800 hover:bg-green-100 border-green-200">Connected</Badge>
+                    <Badge className="bg-green-100 text-green-800 hover:bg-green-100 border-green-200">Connected</Badge>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Phone Number</span>
-                    <span className="font-medium">{session.phoneNumber ? `+${session.phoneNumber}` : 'Unknown'}</span>
+                    <span className="text-sm text-muted-foreground">Phone</span>
+                    <span className="font-medium font-mono">
+                      {session.phoneNumber ? `+${session.phoneNumber}` : "—"}
+                    </span>
                   </div>
                   {session.name && (
                     <div className="flex justify-between items-center">
@@ -102,84 +155,128 @@ export default function Session() {
                   )}
                 </div>
               </div>
-            ) : session?.status === 'connecting' ? (
-              <div className="flex flex-col items-center space-y-8 py-4">
-                <div className="text-center space-y-2">
+            ) : session?.status === "connecting" ? (
+              <div className="flex flex-col items-center space-y-6 py-2 text-center">
+                <div className="space-y-2">
                   <h3 className="font-medium text-lg flex items-center justify-center gap-2">
                     <RefreshCw className="h-5 w-5 animate-spin text-primary" />
-                    Waiting for link...
+                    Waiting for you to enter the code...
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    Follow the instructions below to link your device.
+                    Open WhatsApp on your phone and enter the code below.
                   </p>
                 </div>
 
-                {connectMutation.data && (
-                  <div className="w-full space-y-4 bg-muted/30 p-6 rounded-xl border flex flex-col items-center text-center">
-                    <span className="text-sm text-muted-foreground uppercase tracking-wider font-semibold">Your Pairing Code</span>
+                {pairingCode && (
+                  <div className="w-full bg-muted/30 p-6 rounded-xl border flex flex-col items-center gap-4">
+                    <span className="text-xs text-muted-foreground uppercase tracking-widest font-semibold">
+                      Pairing Code
+                    </span>
                     <div className="flex items-center gap-4">
-                      <code className="text-4xl font-mono font-bold tracking-widest text-primary bg-background px-4 py-2 rounded border shadow-sm">
-                        {connectMutation.data.code}
+                      <code
+                        data-testid="pairing-code"
+                        className="text-5xl font-mono font-bold tracking-[0.25em] text-primary bg-background px-6 py-3 rounded-lg border shadow-sm select-all"
+                      >
+                        {pairingCode}
                       </code>
-                      <Button variant="outline" size="icon" onClick={() => copyCode(connectMutation.data.code)} className="h-12 w-12 rounded">
-                        {copied ? <Check className="h-5 w-5 text-green-600" /> : <Copy className="h-5 w-5" />}
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => copyCode(pairingCode)}
+                        data-testid="button-copy-code"
+                        className="h-12 w-12 rounded-lg"
+                      >
+                        {copied ? (
+                          <Check className="h-5 w-5 text-green-600" />
+                        ) : (
+                          <Copy className="h-5 w-5" />
+                        )}
                       </Button>
                     </div>
+                    <p className="text-xs text-muted-foreground">Code expires in ~5 minutes</p>
                   </div>
                 )}
-
-                <div className="w-full bg-blue-50 text-blue-800 p-4 rounded-lg text-sm space-y-2 border border-blue-200">
-                  <p className="font-semibold flex items-center gap-2">
-                    <AlertCircle className="h-4 w-4" /> Instructions
-                  </p>
-                  <ol className="list-decimal list-inside space-y-1 ml-1 pl-2">
-                    <li>Open WhatsApp on your phone</li>
-                    <li>Tap Menu or Settings and select <strong>Linked Devices</strong></li>
-                    <li>Tap on <strong>Link a Device</strong></li>
-                    <li>Tap <strong>Link with phone number instead</strong> at the bottom</li>
-                    <li>Enter the pairing code shown above</li>
-                  </ol>
-                </div>
               </div>
             ) : (
-              <div className="flex flex-col items-center space-y-6 py-4 text-center">
-                <div className="bg-muted p-6 rounded-full">
-                  <QrCode className="h-12 w-12 text-muted-foreground" />
-                </div>
+              <div className="flex flex-col space-y-5 py-2">
                 <div className="space-y-2">
-                  <h3 className="font-semibold text-lg">Not Connected</h3>
-                  <p className="text-muted-foreground text-sm max-w-sm">
-                    Link your WhatsApp account to start automating replies and managing conversations from this dashboard.
+                  <Label htmlFor="phone-input" className="text-sm font-medium">
+                    WhatsApp Phone Number
+                  </Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="phone-input"
+                      data-testid="input-phone-number"
+                      type="tel"
+                      placeholder="919876543210  (country code + number)"
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      className="pl-9 font-mono text-base"
+                      onKeyDown={(e) => e.key === "Enter" && handleConnect()}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Include country code without + or spaces. E.g. India: 91XXXXXXXXXX
                   </p>
                 </div>
+
+                {session?.status === "error" && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                    <span>Connection error. Please try again with a valid phone number.</span>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
 
-          <CardFooter className="flex justify-center border-t bg-muted/10 p-6">
-            {!isLoading && (
-              session?.status === 'connected' ? (
-                <Button variant="destructive" className="w-full" onClick={handleDisconnect} disabled={disconnectMutation.isPending}>
+          <CardFooter className="flex justify-center border-t bg-muted/10 p-5">
+            {!isLoading &&
+              (session?.status === "connected" ? (
+                <Button
+                  variant="destructive"
+                  className="w-full"
+                  onClick={handleDisconnect}
+                  disabled={disconnectMutation.isPending}
+                  data-testid="button-disconnect"
+                >
                   <PowerOff className="mr-2 h-4 w-4" />
                   {disconnectMutation.isPending ? "Disconnecting..." : "Disconnect WhatsApp"}
                 </Button>
-              ) : session?.status === 'connecting' ? (
-                <Button variant="outline" className="w-full" onClick={handleDisconnect} disabled={disconnectMutation.isPending}>
-                  Cancel Connection
-                </Button>
+              ) : session?.status === "connecting" ? (
+                <div className="w-full space-y-2">
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={handleDisconnect}
+                    disabled={disconnectMutation.isPending}
+                    data-testid="button-cancel"
+                  >
+                    Cancel &amp; Start Over
+                  </Button>
+                </div>
               ) : (
-                <Button className="w-full" size="lg" onClick={handleConnect} disabled={connectMutation.isPending}>
+                <Button
+                  className="w-full"
+                  size="lg"
+                  onClick={handleConnect}
+                  disabled={connectMutation.isPending}
+                  data-testid="button-connect"
+                >
                   {connectMutation.isPending ? (
                     <>
                       <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                       Generating Code...
                     </>
                   ) : (
-                    <>Connect WhatsApp</>
+                    <>
+                      <Smartphone className="mr-2 h-4 w-4" />
+                      Generate Pairing Code
+                    </>
                   )}
                 </Button>
-              )
-            )}
+              ))}
           </CardFooter>
         </Card>
       </div>
