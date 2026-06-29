@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "WhatsApp Bot Dashboard"
+version = "1.0.0"
+id = "artifacts/whatsapp-bot"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20337
+
+[services.development]
+run = "pnpm --filter @workspace/whatsapp-bot run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/whatsapp-bot", "run", "build" ]
+publicDir = "artifacts/whatsapp-bot/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20337"
+BASE_PATH = "/"

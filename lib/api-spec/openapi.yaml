@@ -3,13 +3,22 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: WhatsApp Bot API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: session
+    description: WhatsApp session management
+  - name: messages
+    description: WhatsApp messages
+  - name: bot
+    description: Bot configuration and auto-replies
+  - name: stats
+    description: Dashboard stats
+
 paths:
   /healthz:
     get:
@@ -24,6 +33,243 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /session/status:
+    get:
+      operationId: getSessionStatus
+      tags: [session]
+      summary: Get WhatsApp session status
+      responses:
+        "200":
+          description: Session status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionStatus"
+
+  /session/connect:
+    post:
+      operationId: connectSession
+      tags: [session]
+      summary: Start a new WhatsApp session and get pairing code
+      responses:
+        "200":
+          description: Pairing code generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PairingCode"
+
+  /session/disconnect:
+    post:
+      operationId: disconnectSession
+      tags: [session]
+      summary: Disconnect WhatsApp session
+      responses:
+        "200":
+          description: Disconnected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationResult"
+
+  /messages:
+    get:
+      operationId: getMessages
+      tags: [messages]
+      summary: Get recent WhatsApp messages
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: contactId
+          in: query
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: List of messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+
+  /messages/{id}/reply:
+    post:
+      operationId: sendReply
+      tags: [messages]
+      summary: Send a reply to a message
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReplyInput"
+      responses:
+        "200":
+          description: Reply sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationResult"
+
+  /contacts:
+    get:
+      operationId: getContacts
+      tags: [messages]
+      summary: Get all contacts who have messaged
+      responses:
+        "200":
+          description: List of contacts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Contact"
+
+  /bot/config:
+    get:
+      operationId: getBotConfig
+      tags: [bot]
+      summary: Get bot configuration
+      responses:
+        "200":
+          description: Bot config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotConfig"
+    put:
+      operationId: updateBotConfig
+      tags: [bot]
+      summary: Update bot configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BotConfigInput"
+      responses:
+        "200":
+          description: Updated config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotConfig"
+
+  /bot/rules:
+    get:
+      operationId: getBotRules
+      tags: [bot]
+      summary: Get auto-reply rules
+      responses:
+        "200":
+          description: List of rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BotRule"
+    post:
+      operationId: createBotRule
+      tags: [bot]
+      summary: Create an auto-reply rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BotRuleInput"
+      responses:
+        "201":
+          description: Created rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotRule"
+
+  /bot/rules/{id}:
+    put:
+      operationId: updateBotRule
+      tags: [bot]
+      summary: Update an auto-reply rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BotRuleInput"
+      responses:
+        "200":
+          description: Updated rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotRule"
+    delete:
+      operationId: deleteBotRule
+      tags: [bot]
+      summary: Delete an auto-reply rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationResult"
+
+  /stats/summary:
+    get:
+      operationId: getStatsSummary
+      tags: [stats]
+      summary: Get dashboard statistics summary
+      responses:
+        "200":
+          description: Stats summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatsSummary"
+
+  /stats/activity:
+    get:
+      operationId: getActivityFeed
+      tags: [stats]
+      summary: Get recent activity feed
+      responses:
+        "200":
+          description: Activity feed
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityItem"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +280,247 @@ components:
       required:
         - status
 
+    SessionStatus:
+      type: object
+      properties:
+        connected:
+          type: boolean
+        phoneNumber:
+          type: ["string", "null"]
+        name:
+          type: ["string", "null"]
+        lastSeen:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [disconnected, connecting, connected, error]
+      required:
+        - connected
+        - status
+
+    PairingCode:
+      type: object
+      properties:
+        code:
+          type: string
+        expiresAt:
+          type: string
+        instructions:
+          type: string
+      required:
+        - code
+        - expiresAt
+        - instructions
+
+    OperationResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required:
+        - success
+        - message
+
+    Message:
+      type: object
+      properties:
+        id:
+          type: string
+        contactId:
+          type: string
+        contactName:
+          type: string
+        text:
+          type: string
+        direction:
+          type: string
+          enum: [inbound, outbound]
+        timestamp:
+          type: string
+        isAutoReply:
+          type: boolean
+        status:
+          type: string
+          enum: [received, sent, delivered, read]
+      required:
+        - id
+        - contactId
+        - contactName
+        - text
+        - direction
+        - timestamp
+        - isAutoReply
+        - status
+
+    Contact:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        phoneNumber:
+          type: string
+        lastMessageAt:
+          type: string
+        messageCount:
+          type: integer
+        unreadCount:
+          type: integer
+      required:
+        - id
+        - name
+        - phoneNumber
+        - lastMessageAt
+        - messageCount
+        - unreadCount
+
+    ReplyInput:
+      type: object
+      properties:
+        text:
+          type: string
+      required:
+        - text
+
+    BotConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        businessName:
+          type: string
+        gstNumber:
+          type: ["string", "null"]
+        greeting:
+          type: string
+        refundPolicy:
+          type: string
+        autoReplyDelay:
+          type: integer
+        workingHoursEnabled:
+          type: boolean
+        workingHoursStart:
+          type: string
+        workingHoursEnd:
+          type: string
+      required:
+        - enabled
+        - businessName
+        - greeting
+        - refundPolicy
+        - autoReplyDelay
+        - workingHoursEnabled
+        - workingHoursStart
+        - workingHoursEnd
+
+    BotConfigInput:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        businessName:
+          type: string
+        gstNumber:
+          type: ["string", "null"]
+        greeting:
+          type: string
+        refundPolicy:
+          type: string
+        autoReplyDelay:
+          type: integer
+        workingHoursEnabled:
+          type: boolean
+        workingHoursStart:
+          type: string
+        workingHoursEnd:
+          type: string
+
+    BotRule:
+      type: object
+      properties:
+        id:
+          type: integer
+        keyword:
+          type: string
+        response:
+          type: string
+        enabled:
+          type: boolean
+        matchType:
+          type: string
+          enum: [exact, contains, startsWith]
+        triggerCount:
+          type: integer
+      required:
+        - id
+        - keyword
+        - response
+        - enabled
+        - matchType
+        - triggerCount
+
+    BotRuleInput:
+      type: object
+      properties:
+        keyword:
+          type: string
+        response:
+          type: string
+        enabled:
+          type: boolean
+        matchType:
+          type: string
+          enum: [exact, contains, startsWith]
+      required:
+        - keyword
+        - response
+        - matchType
+
+    StatsSummary:
+      type: object
+      properties:
+        totalMessages:
+          type: integer
+        inboundToday:
+          type: integer
+        autoRepliedToday:
+          type: integer
+        activeContacts:
+          type: integer
+        botEnabled:
+          type: boolean
+        sessionConnected:
+          type: boolean
+        responseRate:
+          type: number
+      required:
+        - totalMessages
+        - inboundToday
+        - autoRepliedToday
+        - activeContacts
+        - botEnabled
+        - sessionConnected
+        - responseRate
+
+    ActivityItem:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [message_received, auto_reply_sent, manual_reply_sent, session_connected, session_disconnected, rule_triggered]
+        description:
+          type: string
+        contactName:
+          type: ["string", "null"]
+        timestamp:
+          type: string
+      required:
+        - id
+        - type
+        - description
+        - timestamp
