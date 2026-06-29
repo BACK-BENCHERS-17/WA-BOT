@@ -73,6 +73,12 @@ export const activityLogTable = pgTable("activity_log", {
   timestamp: timestamp("timestamp").defaultNow().notNull(),
 });
 
+export const waAuthStateTable = pgTable("wa_auth_state", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const insertContactSchema = createInsertSchema(contactsTable);
 export const insertMessageSchema = createInsertSchema(messagesTable);
 export const insertBotRuleSchema = createInsertSchema(botRulesTable).omit({ id: true, triggerCount: true, createdAt: true });
