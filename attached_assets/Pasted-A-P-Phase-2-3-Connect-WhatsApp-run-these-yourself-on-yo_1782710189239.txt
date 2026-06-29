@@ -1,0 +1,244 @@
+Aᴅɪᴛʏᴀ Pᴀɴᴅɪᴛ:
+# Phase 2 & 3 — Connect WhatsApp (run these yourself, on your computer)
+
+I can't run these commands for you — I don't have access to your machine or the
+internet from here. But every command is written out exactly, in order, so you can
+copy-paste each one. If something errors, paste the error back to me and I'll tell
+you the fix.
+
+Important honesty note up front: I have not personally read the
+whatsapp-mcp repo's source code (I have no internet access in this environment).
+Step 3 below has you do that — actually open the bridge's .env.example, README,
+and main.go — before we write the dispatcher in Phase 4. We will build the
+dispatcher against what the code *actually* says, not guesses. This matters because
+guessed ports/token formats are a common source of silent failures.
+
+---
+
+## Step 1 — Confirm Claude Code is ready
+claude --help
+
+Look for these flags in the output (don't worry about what they do yet, just confirm
+they exist): -p / --print, --append-system-prompt-file, --allowedTools,
+--permission-mode. If claude --help doesn't run at all, tell me and we'll install
+Claude Code first.
+
+Then confirm you're logged in:claude -p "say hello"
+If it replies with a greeting, you're logged in and good. If it asks you to log in,
+follow that prompt once.
+
+Ready for the next step? (yes/no)
+
+---
+
+## Step 2 — Install the plumbing
+
+Tell me your OS (Mac / Windows / Linux) and I'll give you the exact install commands
+for: Go (1.24+), Python (3.11+), uv, and FFmpeg. (Windows has one extra gotcha —
+a C compiler for the Go bridge — I'll cover it if that's you.)
+
+---
+
+## Step 3 — Clone and READ the bridge repo (don't skip the reading part)
+git clone https://github.com/verygoodplugins/whatsapp-mcp.git
+cd whatsapp-mcp
+
+Then open and actually read these files — either in a text editor or with cat:cat whatsapp-bridge/.env.example
+cat README.md
+
+From those, confirm and write down:
+- The REST port the bridge listens on
+- The exact body format for /api/send and /api/typing
+- Where the auth token lives (should be something like `whatsapp-bridge/store/.bridge-token`)
+- Where the message database lives (should be something like `whatsapp-bridge/store/messages.db`)
+- Whether it supports a webhook, or whether we need to poll the database directly
+
+Paste me what you find in those files and I'll confirm the plan with you before we
+write a single line of dispatcher code.
+
+---
+
+## Step 4 — Build the bridge
+cd whatsapp-bridge
+go build -o whatsapp-bridge .
+
+If you're on Windows and this fails with a CGO/sqlite error, that's the known
+C-compiler gotcha — tell me and I'll walk you through scoop install gcc +
+go env -w CGO_ENABLED=1.
+
+---
+
+## Step 5 — Link your number
+
+⚠️ Before you do this:
+- Use a spare number, not your main one. This kind of automation — even in
+  careful draft-only mode — can still get a number flagged by WhatsApp, and you
+  don't want to risk your primary line.
+- Set your phone's clock to Automatic (wrong time is the #1 cause of link failures).
+- Turn off any VPN.
+- Update WhatsApp to the latest version.
+- Make one clean attempt — repeated rapid attempts can trigger a temporary
+  WhatsApp cooldown.
+
+Once Step 3's reading confirms how the repo's pairing/QR flow actually works, I'll
+give you the exact linking command and the exact steps on your phone
+(Linked Devices → Link a device → etc.).
+
+---
+
+## Step 6 — Register WhatsApp tools with Claude Code
+
+Once linked, we'll create a small .mcp.json in this project folder pointing at the
+repo's MCP server (via uv, using absolute paths). I'll write this once Step 3's
+findings confirm the server's actual location and run command.
+
+---
+
+That's as far as we can script blind. Steps 3 onward depend on what's actually
+in the repo. Start with Step 1 and Step 2, then do Step 3's reading, and bring me
+what you find — I'll write the rest precisely from there instead of guessing.
+
+# Setup Progress
+
+What we're building: A WhatsApp assistant that learns how you text and
+drafts replies in your voice. You approve and send every single one —
+nothing goes out on its own.
+
+## Phase 0 — Ground rules
+- [ ] Number to use (spare, not main)
+- [ ] Awake hours / timezone (just for context, not enforcement — drafts wait for you anyway)
+- [ ] Confirm Claude Code subscription + logged in
+
+## Phase 1 — Learn how you text
+- [x] Style basics gathered (warm/friendly, first-name basis, prepaid+guarantee)
+- [x] style-guide.md written with real catalog
+- [x] Confirmed it sounds right
+
+## Phase 1.5 — Dispatcher design decided
+- [x] Drafts only, shown on a local webpage, you copy-paste to send — nothing auto-sends
+
+## Phase 2 — Install plumbing
+- [x] PHASE-2-3-SETUP.md written (run on your machine)
+- [ ] Go, Python, uv, FFmpeg installed (you confirm)
+
+## Phase 3 — Connect WhatsApp
+- [ ] Repo cloned, bridge built
+- [ ] You've read .env.example/README and reported back real ports/token/db paths
+- [ ] Phone linked (pairing code)
+- [ ] MCP registered with Claude Code
+
+## Phase 4 — Build the draft dispatcher
+- [ ] Dispatcher script (polls, drafts, never sends)
+- [ ] Review interface (see + approve + send drafts)
+
+## Phase 5 — Go live
+- [ ] Bridge + dispatcher running together
+- [ ] Live test: real message in, draft appears, you send it
+
+## Phase 6 — Handover
+- [ ] HOW-TO-RUN-THIS.md written
+
+# WhatsApp Customer Service Style Guide
+
+Business type: Physical products / e-commerce
+Tone: Warm and friendly, first-name basis
+Payment: Prepaid only, backed by a money-back guarantee
+Trust basis: Registered business name + GST number shown to every customer
+
+This guide is for *drafting* replies — a human reviews and sends every message.
+Nothing here is sent automatically.
+
+---
+
+## 1. The core voice
+
+- Friendly, first names, like talking to a regular customer you like.
+- Short, natural sentences. No corporate filler ("We are pleased to inform you that...").
+- Warm but not pushy. No urgency tactics ("limited stock," "offer ends today") unless
+  it's literally, concretely true at that moment.
+- Emoji used sparingly for warmth (🙂📦✅) — not stacked, not on every line.
+
+## 2. Universal rules (non-negotiable)
+
+1. Never invent a fact. No price, stock count, delivery date, or promise that
+   wasn't actually confirmed. If unsure, say "let me confirm and get back to you"
+   — never guess.
+2. Always lead with who you are. Every first reply to a new customer includes
+   your registered business name and GST number. This is what makes "prepaid only"
+   trustworthy instead of suspicious — show it, don't just assert it.
+3. No pressure language. No fake urgency, no "buy now before it's gone" unless
+   genuinely true. Customers should feel informed, not rushed.
+4. Refund policy stated plainly, every time it's relevant — not buried, not vague.
+   Say exactly what it is: money-back guarantee, no questions asked.
+5. COD note: since you're prepaid-only, always pair that with the guarantee in
+   the *same* message — never mention one without the other. That pairing is what
+   makes prepaid-only feel safe rather than risky.
+6. GST/registration: don't lead with it unprompted — but the moment a customer
+   asks, or seems hesitant about prepaid, offer it immediately and clearly.
+
+## 3. Your current catalog (real numbers — update this section as prices change)
+
+| Item | Price |
+|---|---|
+| Single Insulated Tumbler | ₹349 |
+| Buy 1 Get 1 (2 tumblers) | ₹599 |
+| Customisation (name/text printed) | +₹49 |
+
+BOGO is a genuine ₹99 saving vs. buying two singles (₹698 → ₹599) — real discount,
+state it plainly, no need to oversell it.
+
+Refund window: 7 days, money-back, no questions asked.
+
+## 3. Standard moments — examples
+
+### Greeting a new inquiry
+> Hi [Name]! Thanks for reaching out 🙂 What can I help you with today?
+
+### Sharing product info
+> We've got the Insulated Tumbler — keeps drinks hot or cold for hours, BPA-free.
+> ₹349 for a single, or ₹599 for two (that's a ₹99 saving vs buying separately).
+> Want your name printed on it? That's +₹49. Happy to send photos too.
+
+### Explaining payment (prepaid + guarantee, together)
+> Just so you know upfront — we're prepaid only, but every order has a 7-day
+> money-back guarantee, no questions asked. So you're covered either way. Want
+> me to send the payment link?
+
+### Customer asks about COD
+> We don't do COD right now, but it's prepaid with a 7-day no-questions money-back
+> guarantee — so there's no real risk on your end. Happy to share our GST/registration
+> too if that'd help you feel more comfortable.
+
+### Customer hesitant / asks "is this legit?"
+> Totally fair to ask! We're a registered business — happy to share our GST number
+> and any other details that help. And again, 7-day money-back guarantee if anything's
+> not right.
+
+### After payment
+> Got it, thank you [Name]! 🙏 Your order's confirmed — here's your receipt and order
+> number. Dispatch is usually within [X] days, and I'll send tracking as soon as it ships.
+
+### Delivery time question
+> Usually [X–Y] business days door to door, sometimes a bit faster. I'll send tracking
+> the moment it's out so you can follow along.
+
+### Customer wants a refund
+> No problem at all — you're within the 7-day window, so that's exactly what the
+> guarantee is for. Can you tell me your order number? I'll get this sorted, no
+> questions asked.
+
+### Following up (only with customers who messaged first, never cold)
+
+> Hey [Name], just checking in — were you still deciding on the [product], or did you
+> have any other questions I can help with?
+
+### Going quiet / no response
+> No worries if now's not a good time — I'll be here whenever you're ready 🙂
+
+## 4. What this guide is NOT for
+
+- Not for unsolicited outbound messages to people who haven't contacted you first.
+- Not for any "limited time," BOGO-style script sent cold to new numbers.
+- Not for generating invoices/receipts before a real, confirmed transaction exists.
+
+If a draft ever drifts toward these, that's a sign to rewrite it, not send it.
