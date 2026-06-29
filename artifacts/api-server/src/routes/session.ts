@@ -39,7 +39,15 @@ router.post("/session/connect", async (req, res) => {
     res.json(result);
   } catch (err: any) {
     req.log.error({ err }, "Failed to connect WhatsApp");
-    res.status(500).json({ error: err?.message ?? "Failed to start session" });
+    const msg: string = err?.message ?? "";
+    // Detect IP-block / Connection Closed — give clear guidance
+    if (msg.includes("Connection Closed") || msg.includes("rejected the connection") || msg.includes("closed the connection")) {
+      return res.status(503).json({
+        error: "DATACENTER_BLOCKED",
+        message: "WhatsApp blocks WebSocket connections from cloud/datacenter servers (Replit, AWS, etc.). Deploy this app to your VPS or Render, then open the deployed URL and connect from there — it will work.",
+      });
+    }
+    res.status(500).json({ error: msg || "Failed to start session" });
   }
 });
 

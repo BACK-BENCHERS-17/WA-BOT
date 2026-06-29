@@ -105,7 +105,7 @@ export default function Dashboard() {
                 <div className="text-2xl font-bold">{stats?.activeContacts?.toLocaleString() || 0}</div>
               )}
               <p className="text-xs text-muted-foreground mt-1">
-                {stats?.responseRate ? `${(stats.responseRate * 100).toFixed(1)}% response rate` : 'No data'}
+                {stats?.responseRate != null ? `${stats.responseRate.toFixed(1)}% response rate` : 'No data'}
               </p>
             </CardContent>
           </Card>

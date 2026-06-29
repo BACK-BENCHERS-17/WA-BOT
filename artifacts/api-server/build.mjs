@@ -55,6 +55,8 @@ async function buildAll() {
       "typeorm",
       "protobufjs",
       "@whiskeysockets/baileys",
+      "@hapi/boom",
+      "@hapi/hoek",
       "jimp",
       "sharp",
       "node-cache",

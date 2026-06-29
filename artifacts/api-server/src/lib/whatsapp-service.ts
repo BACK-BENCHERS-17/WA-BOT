@@ -1,6 +1,7 @@
 import { EventEmitter } from "events";
 import path from "path";
 import fs from "fs";
+import { randomUUID } from "crypto";
 import { db } from "@workspace/db";
 import {
   sessionsTable,
@@ -11,76 +12,62 @@ import {
   activityLogTable,
 } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
-import { randomUUID } from "crypto";
 import { logger } from "./logger";
 
 const workspaceRoot = process.cwd().endsWith(path.join("artifacts", "api-server"))
   ? path.resolve(process.cwd(), "../..")
   : process.cwd();
 
-const SESSION_DIR = path.resolve(workspaceRoot, "artifacts/api-server/wa-session");
+export const SESSION_DIR = path.resolve(workspaceRoot, "artifacts/api-server/wa-session");
 
 export const waEvents = new EventEmitter();
-waEvents.setMaxListeners(100);
+waEvents.setMaxListeners(200);
 
-type WASocket = any;
+let sock: any = null;
 
-let sock: WASocket | null = null;
-let isConnecting = false;
+// ─── DB helpers ─────────────────────────────────────────────────────────────
 
 async function getOrCreateSession() {
-  const existing = await db.select().from(sessionsTable).limit(1);
-  if (existing.length > 0) return existing[0];
+  const rows = await db.select().from(sessionsTable).limit(1);
+  if (rows.length > 0) return rows[0];
   const [created] = await db.insert(sessionsTable).values({}).returning();
   return created;
 }
 
-async function updateSessionStatus(
+async function setSessionStatus(
   status: "disconnected" | "connecting" | "connected" | "error",
   extra: { phoneNumber?: string | null; name?: string | null } = {}
 ) {
   const session = await getOrCreateSession();
-  await db.update(sessionsTable).set({
-    status,
-    connected: status === "connected",
-    ...extra,
-    updatedAt: new Date(),
-  }).where(eq(sessionsTable.id, session.id));
+  await db
+    .update(sessionsTable)
+    .set({ status, connected: status === "connected", ...extra, updatedAt: new Date() })
+    .where(eq(sessionsTable.id, session.id));
   waEvents.emit("session_update", { status, ...extra });
 }
 
-async function logActivity(
-  type: string,
-  description: string,
-  contactName?: string
-) {
-  await db.insert(activityLogTable).values({
-    id: randomUUID(),
-    type,
-    description,
-    contactName: contactName ?? null,
-  });
-  waEvents.emit("activity", { type, description, contactName });
+async function addActivity(type: string, description: string, contactName?: string) {
+  try {
+    await db.insert(activityLogTable).values({
+      id: randomUUID(),
+      type,
+      description,
+      contactName: contactName ?? null,
+    });
+    waEvents.emit("activity", { type, description, contactName });
+  } catch (_) {}
 }
 
 async function upsertContact(jid: string, name: string, phoneNumber: string) {
-  const existing = await db
-    .select()
-    .from(contactsTable)
-    .where(eq(contactsTable.id, jid))
-    .limit(1);
-
-  if (existing.length === 0) {
+  const rows = await db.select().from(contactsTable).where(eq(contactsTable.id, jid)).limit(1);
+  if (rows.length === 0) {
     await db.insert(contactsTable).values({
-      id: jid,
-      name,
-      phoneNumber,
-      lastMessageAt: new Date(),
-      messageCount: 1,
-      unreadCount: 1,
+      id: jid, name, phoneNumber,
+      lastMessageAt: new Date(), messageCount: 1, unreadCount: 1,
     });
   } else {
     await db.update(contactsTable).set({
+      name,
       lastMessageAt: new Date(),
       messageCount: sql`${contactsTable.messageCount} + 1`,
       unreadCount: sql`${contactsTable.unreadCount} + 1`,
@@ -89,11 +76,7 @@ async function upsertContact(jid: string, name: string, phoneNumber: string) {
 }
 
 async function findMatchingRule(text: string) {
-  const rules = await db
-    .select()
-    .from(botRulesTable)
-    .where(eq(botRulesTable.enabled, true));
-
+  const rules = await db.select().from(botRulesTable).where(eq(botRulesTable.enabled, true));
   const lower = text.toLowerCase();
   for (const rule of rules) {
     const kw = rule.keyword.toLowerCase();
@@ -104,26 +87,20 @@ async function findMatchingRule(text: string) {
   return null;
 }
 
-async function handleIncomingMessage(jid: string, text: string, pushName: string) {
+// ─── Message handler ─────────────────────────────────────────────────────────
+
+async function handleIncoming(jid: string, text: string, pushName: string) {
   const phoneNumber = jid.replace("@s.whatsapp.net", "");
   const contactName = pushName || phoneNumber;
   const msgId = randomUUID();
 
   await upsertContact(jid, contactName, phoneNumber);
-
   await db.insert(messagesTable).values({
-    id: msgId,
-    contactId: jid,
-    contactName,
-    text,
-    direction: "inbound",
-    isAutoReply: false,
-    status: "received",
+    id: msgId, contactId: jid, contactName,
+    text, direction: "inbound", isAutoReply: false, status: "received",
   });
-
   waEvents.emit("new_message", { id: msgId, contactId: jid, contactName, text, direction: "inbound" });
-
-  await logActivity("message_received", `New message from ${contactName}`, contactName);
+  await addActivity("message_received", `Message from ${contactName}`, contactName);
 
   const configs = await db.select().from(botConfigTable).limit(1);
   const config = configs[0];
@@ -132,229 +109,230 @@ async function handleIncomingMessage(jid: string, text: string, pushName: string
   const rule = await findMatchingRule(text);
   if (!rule) return;
 
-  const delay = (config.autoReplyDelay ?? 1) * 1000;
-  await new Promise((r) => setTimeout(r, delay));
+  await new Promise((r) => setTimeout(r, Math.max((config.autoReplyDelay ?? 1) * 1000, 800)));
 
   const replyText = rule.response
     .replace("{name}", contactName)
     .replace("{business}", config.businessName);
 
   if (sock) {
-    try {
-      await sock.sendMessage(jid, { text: replyText });
-    } catch (err) {
-      logger.error({ err }, "Failed to send auto-reply via WA");
-      return;
-    }
+    try { await sock.sendMessage(jid, { text: replyText }); }
+    catch (err) { logger.error({ err }, "Failed to send WA message"); return; }
   }
 
   const replyId = randomUUID();
   await db.insert(messagesTable).values({
-    id: replyId,
-    contactId: jid,
-    contactName,
-    text: replyText,
-    direction: "outbound",
-    isAutoReply: true,
-    status: "sent",
+    id: replyId, contactId: jid, contactName,
+    text: replyText, direction: "outbound", isAutoReply: true, status: "sent",
   });
-
   await db.update(botRulesTable)
     .set({ triggerCount: sql`${botRulesTable.triggerCount} + 1` })
     .where(eq(botRulesTable.id, rule.id));
 
   waEvents.emit("new_message", { id: replyId, contactId: jid, contactName, text: replyText, direction: "outbound" });
-  await logActivity("auto_reply_sent", `Auto-reply sent to ${contactName} (${rule.keyword} rule)`, contactName);
+  await addActivity("auto_reply_sent", `Auto-reply to ${contactName} (rule: ${rule.keyword})`, contactName);
 }
 
-export async function connectWhatsApp(phoneNumber: string): Promise<{ code: string; expiresAt: string; instructions: string }> {
-  if (isConnecting) {
-    throw new Error("Already connecting. Please wait.");
-  }
+// ─── Core socket builder ─────────────────────────────────────────────────────
 
+async function createSocket(state: any, saveCreds: any) {
+  // Baileys is externalized — loaded as a node module at runtime
+  const baileys = await import("@whiskeysockets/baileys");
+
+  // In Baileys v7, makeWASocket is the default export
+  const makeWASocket: any = baileys.default ?? (baileys as any).makeWASocket;
+  const { DisconnectReason, fetchLatestBaileysVersion, Browsers } = baileys as any;
+
+  const { version } = await fetchLatestBaileysVersion();
+  const pinoLib = await import("pino");
+  const pino: any = pinoLib.default ?? pinoLib;
+
+  const newSock = makeWASocket({
+    version,
+    auth: state,
+    printQRInTerminal: false,
+    logger: pino({ level: "silent" }),
+    browser: Browsers.ubuntu("Chrome"),
+    connectTimeoutMs: 30_000,
+    retryRequestDelayMs: 2000,
+    maxMsgRetryCount: 3,
+    generateHighQualityLinkPreview: false,
+    syncFullHistory: false,
+  });
+
+  newSock.ev.on("creds.update", saveCreds);
+
+  newSock.ev.on("messages.upsert", async ({ messages, type }: any) => {
+    if (type !== "notify") return;
+    for (const msg of messages) {
+      if (msg.key.fromMe || !msg.message) continue;
+      const jid = msg.key.remoteJid ?? "";
+      if (!jid || jid.includes("@g.us") || jid.includes("@broadcast")) continue;
+      const text =
+        msg.message.conversation ||
+        msg.message.extendedTextMessage?.text ||
+        msg.message.imageMessage?.caption || "";
+      if (!text.trim()) continue;
+      const pushName = msg.pushName ?? jid.replace("@s.whatsapp.net", "");
+      try { await handleIncoming(jid, text, pushName); }
+      catch (err) { logger.error({ err }, "Error handling message"); }
+    }
+  });
+
+  return { newSock, DisconnectReason };
+}
+
+// ─── Public API ──────────────────────────────────────────────────────────────
+
+export async function connectWhatsApp(phoneNumber: string): Promise<{
+  code: string;
+  expiresAt: string;
+  instructions: string;
+}> {
   if (sock) {
-    try { sock.end(); } catch (_) {}
+    try { sock.end(undefined); } catch (_) {}
     sock = null;
   }
 
-  isConnecting = true;
   fs.mkdirSync(SESSION_DIR, { recursive: true });
 
-  try {
-    const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } =
-      await import("@whiskeysockets/baileys");
-    const { Boom } = await import("@hapi/boom");
+  const baileys = await import("@whiskeysockets/baileys");
+  const { useMultiFileAuthState, DisconnectReason } = baileys as any;
+  const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
+  const { newSock } = await createSocket(state, saveCreds);
+  sock = newSock;
 
-    const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
-    const { version } = await fetchLatestBaileysVersion();
+  const cleanPhone = phoneNumber.replace(/\D/g, "");
 
-    sock = makeWASocket({
-      version,
-      auth: state,
-      printQRInTerminal: false,
-      logger: (await import("pino")).default({ level: "silent" }),
-      browser: ["WA Bot Dashboard", "Chrome", "1.0.0"],
-    });
+  // Request pairing code — Baileys handles the WA handshake timing internally
+  // We wrap in a promise that also listens for connection close (error case)
+  const code = await new Promise<string>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error("Timed out waiting for WhatsApp to respond. Check your number and try again."));
+    }, 25_000);
 
-    sock.ev.on("creds.update", saveCreds);
-
-    const cleanPhone = phoneNumber.replace(/\D/g, "");
-    const pairingCode = await sock.requestPairingCode(cleanPhone);
-    await updateSessionStatus("connecting", {});
-
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
-
-    sock.ev.on("connection.update", async (update: any) => {
-      const { connection, lastDisconnect } = update;
-
-      if (connection === "open") {
-        isConnecting = false;
-        const me = sock?.user;
-        const name = me?.name ?? me?.id?.split(":")[0] ?? cleanPhone;
-        await updateSessionStatus("connected", {
-          phoneNumber: cleanPhone,
-          name,
-        });
-        await logActivity("session_connected", `WhatsApp connected as ${name}`);
-        logger.info({ name }, "WhatsApp connected");
-      }
-
-      if (connection === "close") {
-        isConnecting = false;
-        const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
-        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-
-        if (statusCode === DisconnectReason.loggedOut) {
-          await updateSessionStatus("disconnected", { phoneNumber: null, name: null });
-          await logActivity("session_disconnected", "WhatsApp session logged out");
-          fs.rmSync(SESSION_DIR, { recursive: true, force: true });
-          sock = null;
-        } else if (shouldReconnect) {
-          logger.info("Reconnecting WhatsApp...");
-          await updateSessionStatus("connecting", {});
-        } else {
-          await updateSessionStatus("error", {});
-        }
-      }
-    });
-
-    sock.ev.on("messages.upsert", async ({ messages, type }: any) => {
-      if (type !== "notify") return;
-      for (const msg of messages) {
-        if (msg.key.fromMe) continue;
-        if (!msg.message) continue;
-
-        const jid = msg.key.remoteJid;
-        if (!jid || jid.includes("@g.us")) continue;
-
-        const text =
-          msg.message.conversation ||
-          msg.message.extendedTextMessage?.text ||
-          msg.message.imageMessage?.caption ||
-          "";
-
-        if (!text) continue;
-
-        const pushName = msg.pushName ?? jid.replace("@s.whatsapp.net", "");
-
-        try {
-          await handleIncomingMessage(jid, text, pushName);
-        } catch (err) {
-          logger.error({ err }, "Error handling incoming message");
-        }
-      }
-    });
-
-    isConnecting = false;
-
-    return {
-      code: pairingCode,
-      expiresAt,
-      instructions: "Open WhatsApp > Settings > Linked Devices > Link a Device > Enter Code",
+    let settled = false;
+    const settle = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      fn();
     };
-  } catch (err) {
-    isConnecting = false;
-    await updateSessionStatus("error", {});
-    throw err;
-  }
+
+    // If the connection closes before we get a code, report a useful error
+    const onConnUpdate = (update: any) => {
+      if (update.connection === "close" && !settled) {
+        const reason = (update.lastDisconnect?.error as any)?.output?.statusCode;
+        settle(() => reject(new Error(
+          reason === 401
+            ? "Unauthorized — use a spare WhatsApp number, not your main one."
+            : reason === 403
+            ? "Access denied by WhatsApp. Try again in a few minutes."
+            : `WhatsApp closed the connection (code ${reason ?? "unknown"}). Verify your number and try again.`
+        )));
+      }
+    };
+    sock.ev.on("connection.update", onConnUpdate);
+
+    // Request the pairing code — this is what Baileys does internally:
+    // it sends the pairing-reg message right after the WA handshake
+    sock.requestPairingCode(cleanPhone)
+      .then((c: string) => {
+        sock.ev.off("connection.update", onConnUpdate);
+        settle(() => resolve(c));
+      })
+      .catch((err: any) => {
+        sock.ev.off("connection.update", onConnUpdate);
+        settle(() => reject(new Error(
+          err?.message === "Connection Closed"
+            ? "WhatsApp rejected the connection. Make sure your number is correct (with country code) and WhatsApp is updated."
+            : err?.message ?? "Failed to get pairing code"
+        )));
+      });
+  });
+
+  await setSessionStatus("connecting");
+
+  // Register persistent connection handler for status changes
+  sock.ev.on("connection.update", async (update: any) => {
+    const { connection, lastDisconnect } = update;
+    if (connection === "open") {
+      const me = sock?.user;
+      const name = me?.name ?? me?.id?.split(":")?.[0] ?? cleanPhone;
+      await setSessionStatus("connected", { phoneNumber: cleanPhone, name });
+      await addActivity("session_connected", `WhatsApp connected as ${name}`);
+      logger.info({ name }, "WhatsApp connected");
+    }
+    if (connection === "close") {
+      const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
+      logger.info({ statusCode }, "WA connection closed");
+      if (statusCode === DisconnectReason?.loggedOut) {
+        await setSessionStatus("disconnected", { phoneNumber: null, name: null });
+        await addActivity("session_disconnected", "Session logged out");
+        try { fs.rmSync(SESSION_DIR, { recursive: true, force: true }); } catch (_) {}
+        sock = null;
+      } else {
+        await setSessionStatus("error");
+      }
+    }
+  });
+
+  return {
+    code,
+    expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    instructions:
+      "Open WhatsApp → Settings → Linked Devices → Link a Device → tap 'Link with phone number instead' → enter this code",
+  };
 }
 
 export async function disconnectWhatsApp() {
   if (sock) {
-    try { sock.end(); } catch (_) {}
+    try { sock.end(undefined); } catch (_) {}
     sock = null;
   }
-  fs.rmSync(SESSION_DIR, { recursive: true, force: true });
-  await updateSessionStatus("disconnected", { phoneNumber: null, name: null });
-  await logActivity("session_disconnected", "WhatsApp session disconnected manually");
+  try { fs.rmSync(SESSION_DIR, { recursive: true, force: true }); } catch (_) {}
+  await setSessionStatus("disconnected", { phoneNumber: null, name: null });
+  await addActivity("session_disconnected", "Session disconnected manually");
 }
 
-export async function sendMessageToContact(jid: string, text: string): Promise<void> {
+export async function sendMessageToContact(jid: string, text: string) {
   if (!sock) throw new Error("WhatsApp not connected");
   await sock.sendMessage(jid, { text });
 }
 
 export async function tryRestoreSession() {
   if (!fs.existsSync(SESSION_DIR)) return;
-  const files = fs.readdirSync(SESSION_DIR);
+  const files = fs.readdirSync(SESSION_DIR).filter((f) => !f.startsWith("."));
   if (files.length === 0) return;
 
   logger.info("Restoring WhatsApp session from disk...");
-
   try {
-    const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } =
-      await import("@whiskeysockets/baileys");
-
+    const baileys = await import("@whiskeysockets/baileys");
+    const { useMultiFileAuthState, DisconnectReason } = baileys as any;
     const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
-    const { version } = await fetchLatestBaileysVersion();
-
-    sock = makeWASocket({
-      version,
-      auth: state,
-      printQRInTerminal: false,
-      logger: (await import("pino")).default({ level: "silent" }),
-      browser: ["WA Bot Dashboard", "Chrome", "1.0.0"],
-    });
-
-    sock.ev.on("creds.update", saveCreds);
+    const { newSock } = await createSocket(state, saveCreds);
+    sock = newSock;
 
     sock.ev.on("connection.update", async (update: any) => {
       const { connection, lastDisconnect } = update;
       if (connection === "open") {
         const me = sock?.user;
-        const name = me?.name ?? me?.id?.split(":")[0] ?? "";
-        await updateSessionStatus("connected", { name });
-        logger.info({ name }, "WhatsApp session restored");
+        const name = me?.name ?? me?.id?.split(":")?.[0] ?? "";
+        await setSessionStatus("connected", { name });
+        logger.info({ name }, "WA session restored");
       }
       if (connection === "close") {
         const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
-        if (statusCode === DisconnectReason.loggedOut) {
-          await updateSessionStatus("disconnected", { phoneNumber: null, name: null });
-          fs.rmSync(SESSION_DIR, { recursive: true, force: true });
+        if (statusCode === DisconnectReason?.loggedOut) {
+          await setSessionStatus("disconnected", { phoneNumber: null, name: null });
+          try { fs.rmSync(SESSION_DIR, { recursive: true, force: true }); } catch (_) {}
           sock = null;
         } else {
-          await updateSessionStatus("connecting", {});
+          await setSessionStatus("connecting");
         }
       }
     });
-
-    sock.ev.on("messages.upsert", async ({ messages, type }: any) => {
-      if (type !== "notify") return;
-      for (const msg of messages) {
-        if (msg.key.fromMe) continue;
-        if (!msg.message) continue;
-        const jid = msg.key.remoteJid;
-        if (!jid || jid.includes("@g.us")) continue;
-        const text =
-          msg.message.conversation ||
-          msg.message.extendedTextMessage?.text ||
-          "";
-        if (!text) continue;
-        const pushName = msg.pushName ?? jid.replace("@s.whatsapp.net", "");
-        try { await handleIncomingMessage(jid, text, pushName); } catch (_) {}
-      }
-    });
   } catch (err) {
-    logger.error({ err }, "Failed to restore WhatsApp session");
+    logger.error({ err }, "Failed to restore WA session");
   }
 }
