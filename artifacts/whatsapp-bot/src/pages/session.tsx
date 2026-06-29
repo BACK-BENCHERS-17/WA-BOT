@@ -61,8 +61,9 @@ export default function Session() {
           toast({ title: "Pairing code ready", description: "Enter this code in WhatsApp on your phone." });
         },
         onError: (err: any) => {
+          const status = (err as any)?.response?.status;
           const body = (err as any)?.response?.data ?? {};
-          if (body?.error === "DATACENTER_BLOCKED") {
+          if (status === 503 || body?.error === "DATACENTER_BLOCKED" || (body?.message ?? "").includes("datacenter") || (body?.message ?? "").includes("WhatsApp blocks")) {
             setBlockedError(true);
           } else {
             toast({
