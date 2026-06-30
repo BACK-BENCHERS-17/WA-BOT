@@ -232,18 +232,28 @@ export default function Session() {
                   <div className="bg-amber-50 border border-amber-300 text-amber-900 rounded-lg p-4 text-sm space-y-3">
                     <p className="font-semibold flex items-center gap-2">
                       <AlertCircle className="h-4 w-4 shrink-0" />
-                      WhatsApp blocks cloud server IPs
+                      Replit servers pe WhatsApp connection nahi hoga
                     </p>
-                    <p>
-                      WhatsApp rejects WebSocket connections from datacenter servers (Replit, AWS, etc.) during development.
-                      This is normal — the bot is ready to work on a VPS.
+                    <p className="text-amber-800">
+                      WhatsApp Replit ke sabhi servers (dev + published) ko block karta hai — kyunki yeh datacenter IPs hain.
+                      Bot ka code bilkul sahi hai, sirf server change karna hai.
                     </p>
-                    <div className="bg-amber-100 rounded-md p-3 space-y-1 font-mono text-xs">
-                      <p className="font-semibold font-sans text-xs uppercase tracking-wide">To connect your WhatsApp:</p>
-                      <p>1. Click <strong>Publish</strong> in Replit to deploy</p>
-                      <p>2. Open your deployed <strong>.replit.app</strong> URL</p>
-                      <p>3. Go to <strong>Session</strong> page and enter your number</p>
-                      <p>4. The pairing code will appear — enter it in WhatsApp</p>
+                    <div className="bg-white border border-amber-200 rounded-md p-3 space-y-2 text-xs">
+                      <p className="font-semibold text-amber-900 uppercase tracking-wide text-xs">✅ Render.com pe deploy karo (Free, 5 min):</p>
+                      <p><strong>1.</strong> GitHub pe code push karo</p>
+                      <p><strong>2.</strong> <a href="https://render.com" target="_blank" rel="noreferrer" className="underline text-blue-700 font-semibold">render.com</a> → New → Blueprint → apna repo select karo</p>
+                      <p><strong>3.</strong> Render khud web service + PostgreSQL DB banayega (<code>render.yaml</code> already hai)</p>
+                      <p><strong>4.</strong> Deploy ke baad apni <code>.onrender.com</code> URL pe jaao → yahan number daalo → pairing code aayega ✓</p>
+                    </div>
+                    <div className="bg-white border border-amber-200 rounded-md p-3 space-y-2 text-xs">
+                      <p className="font-semibold text-amber-900 uppercase tracking-wide text-xs">🐳 Ya Docker se apne VPS pe:</p>
+                      <p className="font-mono bg-amber-50 p-2 rounded text-xs leading-relaxed">
+                        docker build -t wa-command .<br/>
+                        docker run -p 8080:8080 \<br/>
+                        &nbsp;&nbsp;-e DATABASE_URL="postgres://..." \<br/>
+                        &nbsp;&nbsp;-e NODE_ENV=production \<br/>
+                        &nbsp;&nbsp;wa-command
+                      </p>
                     </div>
                     <button
                       className="text-xs underline text-amber-700"
