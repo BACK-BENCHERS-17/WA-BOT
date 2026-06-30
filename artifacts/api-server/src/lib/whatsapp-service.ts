@@ -1,6 +1,4 @@
 import { EventEmitter } from "events";
-import path from "path";
-import fs from "fs";
 import { randomUUID } from "crypto";
 import { db } from "@workspace/db";
 import {
@@ -13,12 +11,7 @@ import {
 } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { logger } from "./logger";
-
-const workspaceRoot = process.cwd().endsWith(path.join("artifacts", "api-server"))
-  ? path.resolve(process.cwd(), "../..")
-  : process.cwd();
-
-export const SESSION_DIR = path.resolve(workspaceRoot, "artifacts/api-server/wa-session");
+import { usePostgresAuthState, clearAuthState, hasAuthState } from "./wa-db-auth";
 
 export const waEvents = new EventEmitter();
 waEvents.setMaxListeners(200);
@@ -136,10 +129,7 @@ async function handleIncoming(jid: string, text: string, pushName: string) {
 // ─── Core socket builder ─────────────────────────────────────────────────────
 
 async function createSocket(state: any, saveCreds: any) {
-  // Baileys is externalized — loaded as a node module at runtime
   const baileys = await import("@whiskeysockets/baileys");
-
-  // In Baileys v7, makeWASocket is the default export
   const makeWASocket: any = baileys.default ?? (baileys as any).makeWASocket;
   const { DisconnectReason, fetchLatestBaileysVersion, Browsers } = baileys as any;
 
@@ -194,21 +184,16 @@ export async function connectWhatsApp(phoneNumber: string): Promise<{
     sock = null;
   }
 
-  fs.mkdirSync(SESSION_DIR, { recursive: true });
-
-  const baileys = await import("@whiskeysockets/baileys");
-  const { useMultiFileAuthState, DisconnectReason } = baileys as any;
-  const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
+  // Use PostgreSQL for auth state — survives restarts on any server
+  const { state, saveCreds } = await usePostgresAuthState();
   const { newSock } = await createSocket(state, saveCreds);
   sock = newSock;
 
   const cleanPhone = phoneNumber.replace(/\D/g, "");
 
-  // Request pairing code — Baileys handles the WA handshake timing internally
-  // We wrap in a promise that also listens for connection close (error case)
   const code = await new Promise<string>((resolve, reject) => {
     const timeoutId = setTimeout(() => {
-      reject(new Error("Timed out waiting for WhatsApp to respond. Check your number and try again."));
+      reject(new Error("Timed out waiting for WhatsApp. Check your number and try again."));
     }, 25_000);
 
     let settled = false;
@@ -219,7 +204,6 @@ export async function connectWhatsApp(phoneNumber: string): Promise<{
       fn();
     };
 
-    // If the connection closes before we get a code, report a useful error
     const onConnUpdate = (update: any) => {
       if (update.connection === "close" && !settled) {
         const reason = (update.lastDisconnect?.error as any)?.output?.statusCode;
@@ -234,8 +218,6 @@ export async function connectWhatsApp(phoneNumber: string): Promise<{
     };
     sock.ev.on("connection.update", onConnUpdate);
 
-    // Request the pairing code — this is what Baileys does internally:
-    // it sends the pairing-reg message right after the WA handshake
     sock.requestPairingCode(cleanPhone)
       .then((c: string) => {
         sock.ev.off("connection.update", onConnUpdate);
@@ -253,7 +235,6 @@ export async function connectWhatsApp(phoneNumber: string): Promise<{
 
   await setSessionStatus("connecting");
 
-  // Register persistent connection handler for status changes
   sock.ev.on("connection.update", async (update: any) => {
     const { connection, lastDisconnect } = update;
     if (connection === "open") {
@@ -266,10 +247,12 @@ export async function connectWhatsApp(phoneNumber: string): Promise<{
     if (connection === "close") {
       const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
       logger.info({ statusCode }, "WA connection closed");
+      const baileys = await import("@whiskeysockets/baileys");
+      const { DisconnectReason } = baileys as any;
       if (statusCode === DisconnectReason?.loggedOut) {
         await setSessionStatus("disconnected", { phoneNumber: null, name: null });
         await addActivity("session_disconnected", "Session logged out");
-        try { fs.rmSync(SESSION_DIR, { recursive: true, force: true }); } catch (_) {}
+        await clearAuthState();
         sock = null;
       } else {
         await setSessionStatus("error");
@@ -290,7 +273,7 @@ export async function disconnectWhatsApp() {
     try { sock.end(undefined); } catch (_) {}
     sock = null;
   }
-  try { fs.rmSync(SESSION_DIR, { recursive: true, force: true }); } catch (_) {}
+  await clearAuthState();
   await setSessionStatus("disconnected", { phoneNumber: null, name: null });
   await addActivity("session_disconnected", "Session disconnected manually");
 }
@@ -301,15 +284,13 @@ export async function sendMessageToContact(jid: string, text: string) {
 }
 
 export async function tryRestoreSession() {
-  if (!fs.existsSync(SESSION_DIR)) return;
-  const files = fs.readdirSync(SESSION_DIR).filter((f) => !f.startsWith("."));
-  if (files.length === 0) return;
+  // Check DB for saved credentials instead of filesystem
+  const hasState = await hasAuthState();
+  if (!hasState) return;
 
-  logger.info("Restoring WhatsApp session from disk...");
+  logger.info("Restoring WhatsApp session from database...");
   try {
-    const baileys = await import("@whiskeysockets/baileys");
-    const { useMultiFileAuthState, DisconnectReason } = baileys as any;
-    const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
+    const { state, saveCreds } = await usePostgresAuthState();
     const { newSock } = await createSocket(state, saveCreds);
     sock = newSock;
 
@@ -319,13 +300,15 @@ export async function tryRestoreSession() {
         const me = sock?.user;
         const name = me?.name ?? me?.id?.split(":")?.[0] ?? "";
         await setSessionStatus("connected", { name });
-        logger.info({ name }, "WA session restored");
+        logger.info({ name }, "WA session restored from DB");
       }
       if (connection === "close") {
         const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
+        const baileys = await import("@whiskeysockets/baileys");
+        const { DisconnectReason } = baileys as any;
         if (statusCode === DisconnectReason?.loggedOut) {
           await setSessionStatus("disconnected", { phoneNumber: null, name: null });
-          try { fs.rmSync(SESSION_DIR, { recursive: true, force: true }); } catch (_) {}
+          await clearAuthState();
           sock = null;
         } else {
           await setSessionStatus("connecting");
@@ -333,6 +316,6 @@ export async function tryRestoreSession() {
       }
     });
   } catch (err) {
-    logger.error({ err }, "Failed to restore WA session");
+    logger.error({ err }, "Failed to restore WA session from DB");
   }
 }

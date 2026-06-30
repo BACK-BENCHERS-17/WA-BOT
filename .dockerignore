@@ -1,0 +1,14 @@
+.git
+.gitignore
+node_modules
+**/node_modules
+**/dist
+**/.tsbuildinfo
+artifacts/api-server/wa-session
+attached_assets
+.local
+.agents
+*.log
+.env
+.env.*
+!.env.example
