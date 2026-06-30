@@ -1,0 +1,100 @@
+2026-06-30T03:12:40.507568361Z 
+2026-06-30T03:12:40.507573631Z #7 [internal] load build context
+2026-06-30T03:12:40.507577591Z #7 transferring context: 912.78kB 0.0s done
+2026-06-30T03:12:40.507580871Z #7 DONE 0.1s
+2026-06-30T03:12:40.507583802Z 
+2026-06-30T03:12:40.507589222Z #6 [base  1/14] FROM docker.io/library/node:24-slim@sha256:b31e7a42fdf8b8aa5f5ed477c72d694301273f1069c5a2f71d53c6482e99a2fc
+2026-06-30T03:12:41.118096438Z #6 extracting sha256:68629629b516c3cd6f5e71ffbe18e32afb1ae5b4926c92d058c0f11ef1fd58a3
+2026-06-30T03:12:41.671250952Z #6 extracting sha256:68629629b516c3cd6f5e71ffbe18e32afb1ae5b4926c92d058c0f11ef1fd58a3 0.7s done
+2026-06-30T03:12:41.671270552Z #6 DONE 1.5s
+2026-06-30T03:12:41.821604269Z 
+2026-06-30T03:12:41.821626009Z #6 [base  1/14] FROM docker.io/library/node:24-slim@sha256:b31e7a42fdf8b8aa5f5ed477c72d694301273f1069c5a2f71d53c6482e99a2fc
+2026-06-30T03:12:41.82163362Z #6 extracting sha256:fde66df71f630d9e71153841cde1cf9c17ab97485bd0c4ece659b235e74b8de2
+2026-06-30T03:12:41.879392151Z #6 extracting sha256:fde66df71f630d9e71153841cde1cf9c17ab97485bd0c4ece659b235e74b8de2 0.2s done
+2026-06-30T03:12:41.879405152Z #6 DONE 1.7s
+2026-06-30T03:12:42.029683617Z 
+2026-06-30T03:12:42.029710348Z #6 [base  1/14] FROM docker.io/library/node:24-slim@sha256:b31e7a42fdf8b8aa5f5ed477c72d694301273f1069c5a2f71d53c6482e99a2fc
+2026-06-30T03:12:42.029716068Z #6 extracting sha256:6a1d6381a27f2bac8006592190d8baa931e57b804d7dfef93f2afba46ef44157
+2026-06-30T03:12:43.061490413Z #6 extracting sha256:6a1d6381a27f2bac8006592190d8baa931e57b804d7dfef93f2afba46ef44157 1.2s done
+2026-06-30T03:12:43.061509103Z #6 DONE 2.8s
+2026-06-30T03:12:43.286058265Z 
+2026-06-30T03:12:43.286078886Z #6 [base  1/14] FROM docker.io/library/node:24-slim@sha256:b31e7a42fdf8b8aa5f5ed477c72d694301273f1069c5a2f71d53c6482e99a2fc
+2026-06-30T03:12:43.286083326Z #6 extracting sha256:37c6775b2d205ca3c4a3dda768fb5696549785c3afeae89473fbff0bd303cc11 0.1s done
+2026-06-30T03:12:43.286096496Z #6 extracting sha256:90c0c1ae6457717aec354ea57244d5a05c843ada32ec0e9a705a6025f7806e67 0.0s done
+2026-06-30T03:12:43.286098686Z #6 DONE 2.9s
+2026-06-30T03:12:43.286100617Z 
+2026-06-30T03:12:43.286103177Z #8 [base  2/14] RUN corepack enable && corepack prepare pnpm@9 --activate
+2026-06-30T03:12:43.524357347Z #8 0.389 Preparing pnpm@9 for immediate activation...
+2026-06-30T03:12:44.167275718Z #8 DONE 1.0s
+2026-06-30T03:12:44.278689194Z 
+2026-06-30T03:12:44.278707684Z #9 [base  3/14] WORKDIR /app
+2026-06-30T03:12:44.278712374Z #9 DONE 0.0s
+2026-06-30T03:12:44.278716225Z 
+2026-06-30T03:12:44.278720735Z #10 [base  4/14] COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+2026-06-30T03:12:44.278724625Z #10 DONE 0.0s
+2026-06-30T03:12:44.278728255Z 
+2026-06-30T03:12:44.278732815Z #11 [base  5/14] COPY lib/db/package.json ./lib/db/
+2026-06-30T03:12:44.278736605Z #11 DONE 0.0s
+2026-06-30T03:12:44.278740195Z 
+2026-06-30T03:12:44.278743955Z #12 [base  6/14] COPY lib/api-spec/package.json ./lib/api-spec/
+2026-06-30T03:12:44.278747785Z #12 DONE 0.0s
+2026-06-30T03:12:44.527820504Z 
+2026-06-30T03:12:44.527860275Z #13 [base  7/14] COPY lib/api-zod/package.json ./lib/api-zod/
+2026-06-30T03:12:44.527867435Z #13 DONE 0.0s
+2026-06-30T03:12:44.527873395Z 
+2026-06-30T03:12:44.527879236Z #14 [base  8/14] COPY lib/api-client-react/package.json ./lib/api-client-react/
+2026-06-30T03:12:44.527883236Z #14 DONE 0.0s
+2026-06-30T03:12:44.527886886Z 
+2026-06-30T03:12:44.527890716Z #15 [base  9/14] COPY artifacts/api-server/package.json ./artifacts/api-server/
+2026-06-30T03:12:44.527894546Z #15 DONE 0.0s
+2026-06-30T03:12:44.527898176Z 
+2026-06-30T03:12:44.527902746Z #16 [base 10/14] COPY artifacts/whatsapp-bot/package.json ./artifacts/whatsapp-bot/
+2026-06-30T03:12:44.527906556Z #16 DONE 0.0s
+2026-06-30T03:12:44.527910146Z 
+2026-06-30T03:12:44.527913947Z #17 [runner 11/15] RUN pnpm install --frozen-lockfile --prod
+2026-06-30T03:12:45.028625256Z #17 0.512 (node:213) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-06-30T03:12:45.028645096Z #17 0.512 (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-06-30T03:12:45.028650316Z #17 0.514 Scope: all 7 workspace projects
+2026-06-30T03:12:45.028656036Z #17 0.574  ERR_PNPM_LOCKFILE_CONFIG_MISMATCH  Cannot proceed with the frozen installation. The current "overrides" configuration doesn't match the value found in the lockfile
+2026-06-30T03:12:45.028659997Z #17 0.574 
+2026-06-30T03:12:45.028664427Z #17 0.574 Update your lockfile using "pnpm install --no-frozen-lockfile"
+2026-06-30T03:12:45.028669187Z #17 ERROR: process "/bin/sh -c pnpm install --frozen-lockfile --prod" did not complete successfully: exit code: 1
+2026-06-30T03:12:45.028672837Z 
+2026-06-30T03:12:45.028678107Z #18 [base 11/14] RUN pnpm install --frozen-lockfile
+2026-06-30T03:12:45.028682107Z #18 0.511 (node:214) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-06-30T03:12:45.028686047Z #18 0.511 (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-06-30T03:12:45.028689957Z #18 0.513 Scope: all 7 workspace projects
+2026-06-30T03:12:45.028693777Z #18 0.569  ERR_PNPM_LOCKFILE_CONFIG_MISMATCH  Cannot proceed with the frozen installation. The current "overrides" configuration doesn't match the value found in the lockfile
+2026-06-30T03:12:45.028706128Z #18 0.569 
+2026-06-30T03:12:45.028708698Z #18 0.569 Update your lockfile using "pnpm install --no-frozen-lockfile"
+2026-06-30T03:12:45.028711738Z #18 ERROR: process "/bin/sh -c pnpm install --frozen-lockfile" did not complete successfully: exit code: 1
+2026-06-30T03:12:45.028714128Z ------
+2026-06-30T03:12:45.028716958Z  > importing cache manifest
+2026-06-30T03:12:45.028719388Z ------
+2026-06-30T03:12:45.028721838Z ------
+2026-06-30T03:12:45.028735918Z  > [base 11/14] RUN pnpm install --frozen-lockfile:
+2026-06-30T03:12:45.028738778Z 0.511 (node:214) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-06-30T03:12:45.028741199Z 0.511 (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-06-30T03:12:45.028743719Z 0.513 Scope: all 7 workspace projects
+2026-06-30T03:12:45.028747669Z 0.569  ERR_PNPM_LOCKFILE_CONFIG_MISMATCH  Cannot proceed with the frozen installation. The current "overrides" configuration doesn't match the value found in the lockfile
+2026-06-30T03:12:45.028750089Z 0.569 
+2026-06-30T03:12:45.028752579Z 0.569 Update your lockfile using "pnpm install --no-frozen-lockfile"
+2026-06-30T03:12:45.028755049Z ------
+2026-06-30T03:12:45.028757409Z ------
+2026-06-30T03:12:45.028759849Z  > [runner 11/15] RUN pnpm install --frozen-lockfile --prod:
+2026-06-30T03:12:45.028769879Z 0.512 (node:213) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-06-30T03:12:45.028772399Z 0.512 (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-06-30T03:12:45.02877481Z 0.514 Scope: all 7 workspace projects
+2026-06-30T03:12:45.02877737Z 0.574  ERR_PNPM_LOCKFILE_CONFIG_MISMATCH  Cannot proceed with the frozen installation. The current "overrides" configuration doesn't match the value found in the lockfile
+2026-06-30T03:12:45.02878005Z 0.574 
+2026-06-30T03:12:45.0287825Z 0.574 Update your lockfile using "pnpm install --no-frozen-lockfile"
+2026-06-30T03:12:45.02878493Z ------
+2026-06-30T03:12:45.029468296Z Dockerfile:17
+2026-06-30T03:12:45.029483627Z --------------------
+2026-06-30T03:12:45.029487147Z   15 |     COPY artifacts/whatsapp-bot/package.json ./artifacts/whatsapp-bot/
+2026-06-30T03:12:45.029489956Z   16 |     
+2026-06-30T03:12:45.029492687Z   17 | >>> RUN pnpm install --frozen-lockfile
+2026-06-30T03:12:45.029495137Z   18 |     
+2026-06-30T03:12:45.029498117Z   19 |     # ─── Copy source ─────────────────────────────────────────────────────────────
+2026-06-30T03:12:45.029500637Z --------------------
+2026-06-30T03:12:45.029503467Z error: failed to solve: process "/bin/sh -c pnpm install --frozen-lockfile" did not complete successfully: exit code: 1
